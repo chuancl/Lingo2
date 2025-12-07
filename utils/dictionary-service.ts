@@ -2,6 +2,8 @@
 
 
 
+
+
 import { TranslationEngine, WordEntry, WordCategory } from "../types";
 import { browser } from "wxt/browser";
 

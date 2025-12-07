@@ -2,6 +2,7 @@
 
 
 
+
 import { defineBackground } from 'wxt/sandbox';
 import { browser } from 'wxt/browser';
 import { callTencentTranslation } from '../utils/api';
@@ -76,6 +77,7 @@ export default defineBackground(() => {
                   let inflections: string[] = [];
                   if (data.exchange) {
                       // exchange is often { word_pl: [...], word_past: [...], ... }
+                      // Values can be arrays of strings or strings
                       Object.values(data.exchange).forEach((val: any) => {
                           if (Array.isArray(val)) {
                               inflections.push(...val);
@@ -166,13 +168,18 @@ export default defineBackground(() => {
                   sentences = sentences.filter(s => s.orig.length > 8 && s.orig.includes(' '));
 
                   // Extract Inflections
-                  // Youdao's simple.word[0].exchange might contain data, but JSONAPI often hides it in other chunks.
-                  // We'll leave empty for Youdao default parsing unless it's easy to find.
+                  // Often in simple.word[0].exchange or meta
                   const inflections: string[] = [];
-
-                  if (phoneticUs || phoneticUk || definitions.length > 0) {
-                      return { phoneticUs, phoneticUk, definitions, sentences, inflections };
-                  }
+                  // Best effort attempt for Youdao JSONAPI variations
+                  // Sometimes in data.synonyms or simple
+                  
+                  return {
+                      phoneticUs,
+                      phoneticUk,
+                      definitions,
+                      sentences,
+                      inflections
+                  };
               }
 
               // --- 3. Free Dictionary API (Google) ---
@@ -222,30 +229,36 @@ export default defineBackground(() => {
       return null;
   };
 
-  // Helper to pick the best sentence for a given definition/part of speech
+  // Improved Sentence Assigner: Tries to find a sentence that matches the definition keywords
   const smartAssignSentence = (
       sentences: { orig: string; trans: string }[], 
-      partOfSpeech: string, 
+      definitionKeywords: string[],
       idx: number
   ) => {
-      if (sentences.length === 0) return { orig: '', trans: '' };
+      if (!sentences || sentences.length === 0) return { orig: '', trans: '' };
       
-      // Simple Cycle fallback
-      const defaultSent = sentences[idx % sentences.length];
+      // 1. Try to find a sentence that contains one of the definition keywords in its translation
+      for (const sent of sentences) {
+          if (!sent.trans) continue;
+          for (const keyword of definitionKeywords) {
+              // Only check keywords longer than 1 char to avoid noise, unless definition itself is 1 char
+              if (keyword.length > 1 || definitionKeywords.length === 1) {
+                  if (sent.trans.includes(keyword)) {
+                      return sent;
+                  }
+              }
+          }
+      }
 
-      // Smart Matching Logic:
-      // If POS is verb (v.), try to find sentence with -ing, -ed, or just the word
-      // If POS is noun (n.), try to find sentence where word is likely noun (harder, so mostly rely on cycle)
-      
-      // Since we don't have deep NLP here, the cycling index strategy `idx % sentences.length` 
-      // is actually often effective IF the dictionary returns sentences in an order corresponding to definitions.
-      // However, if we suspect the first N sentences are all for meaning 1, we should try to space them out.
-      
-      // Heuristic: If we have enough sentences, try to pick one that hasn't been used by previous definitions if possible.
-      // But here we are processing map() so we don't know global usage easily without context.
-      
-      // Let's stick to the cycle but ensure we filter out bad ones.
-      return defaultSent;
+      // 2. Fallback: Cyclic assignment
+      return sentences[idx % sentences.length];
+  };
+
+  // Helper to extract keywords from meaning array
+  const extractKeywords = (means: string[]) => {
+      // means is ["书籍", "本"]
+      // Split by common separators just in case
+      return means.flatMap(m => m.split(/[,，;；]/)).map(s => s.trim()).filter(Boolean);
   };
 
   // Message Handler for API Requests
@@ -321,9 +334,9 @@ export default defineBackground(() => {
                   // Format translation as "n. definition"
                   const formattedTranslation = def.part ? `${def.part} ${def.means.join('; ')}` : def.means.join('; ');
                   
-                  // Use Cyclic Assignment to ensure distinct definitions get distinct sentences (if available)
-                  // e.g. Def 0 -> Sent 0, Def 1 -> Sent 1
-                  const sent = validSentences.length > 0 ? validSentences[idx % validSentences.length] : { orig: '', trans: '' };
+                  // Use Smart Assignment Logic
+                  const keywords = extractKeywords(def.means);
+                  const sent = smartAssignSentence(validSentences, keywords, idx);
 
                   return {
                       translation: formattedTranslation.trim(),

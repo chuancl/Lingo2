@@ -2,6 +2,7 @@
 
 
 
+
 import { StyleConfig, WordCategory, Scenario, TranslationEngine, WordInteractionConfig, PageWidgetConfig, AnkiConfig, OriginalTextConfig, MergeStrategyConfig, AutoTranslateConfig, DictionaryEngine } from './types';
 
 export const DEFAULT_STYLE: StyleConfig = {
@@ -209,5 +210,6 @@ export const DEFAULT_MERGE_STRATEGY: MergeStrategyConfig = {
     { id: 'context', label: '来源原句 (Context)', enabled: true },
     { id: 'mixed', label: '中英混合句 (Mixed)', enabled: true },
     { id: 'dictionary', label: '词典例句 (Dictionary)', enabled: true },
+    { id: 'inflections', label: '词态变化 (Morphology)', enabled: true },
   ],
 };
