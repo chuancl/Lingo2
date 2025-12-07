@@ -8,7 +8,7 @@ interface DictionaryResult {
   phoneticUk: string;
   meanings: {
     translation: string;
-    partOfSpeech?: string; // Added to help with better display
+    partOfSpeech?: string; 
     definition?: string;
     contextSentence: string;
     mixedSentence: string;
@@ -96,10 +96,8 @@ export const fetchWordDetails = async (
     }
   } else {
     // If no preference, we use ALL meanings returned by the dictionary.
-    // However, if the result has no meanings (fallback), we might get one empty one.
-    if (selectedMeanings.length === 0) {
-       // Should allow empty to fail gracefully or handled upstream
-    }
+    // Ensure we filter out empty meanings if any
+    selectedMeanings = selectedMeanings.filter(m => m.translation && m.translation.trim().length > 0);
   }
 
   // 3. Map to WordEntry objects

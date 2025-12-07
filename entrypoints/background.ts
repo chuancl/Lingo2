@@ -57,7 +57,7 @@ export default defineBackground(() => {
                   const symbol = data.symbols[0];
                   
                   const definitions = (symbol.parts || []).map((p: any) => ({
-                      part: p.part || '',
+                      part: p.part ? (p.part.endsWith('.') ? p.part : p.part + '.') : '', // Normalize POS
                       means: p.means || [] // Array of strings
                   }));
 
@@ -106,21 +106,24 @@ export default defineBackground(() => {
                           // Try to find pos and tran
                           // Youdao struct can be simple object or nested
                           // Commonly: { pos: "n.", tran: "书籍" }
-                          if (trItem.pos && trItem.tran) {
+                          if (trItem.pos || trItem.tran) {
+                              let pos = trItem.pos || '';
+                              if (pos && !pos.endsWith('.')) pos += '.';
+                              
                               definitions.push({
-                                  part: trItem.pos,
-                                  means: [trItem.tran]
+                                  part: pos,
+                                  means: [trItem.tran || '']
                               });
                           } else if (trItem.tr && trItem.tr[0] && trItem.tr[0].l && trItem.tr[0].l.i) {
                                // Fallback deeper nested structure sometimes seen
                                const raw = trItem.tr[0].l.i[0];
-                               // Raw might be "n. 书籍"
+                               // Raw might be "n. 书籍" or just "书籍"
                                // Simple parsing
-                               const parts = raw.split('.');
-                               if (parts.length > 1) {
+                               const parts = raw.match(/^([a-z]+\.)\s*(.*)/);
+                               if (parts) {
                                    definitions.push({
-                                       part: parts[0] + '.',
-                                       means: [parts.slice(1).join('.').trim()]
+                                       part: parts[1],
+                                       means: [parts[2]]
                                    });
                                } else {
                                    definitions.push({ part: '', means: [raw] });
@@ -228,20 +231,12 @@ export default defineBackground(() => {
                 phoneticUk: `/${text}UK/`,
                 meanings: [
                     {
-                        translation: preferredTranslation || "示例释义1",
+                        translation: preferredTranslation || "n. 示例释义1",
                         contextSentence: `This is a sentence for ${text} meaning 1.`,
                         contextSentenceTranslation: `这是关于 ${text} 含义1的句子。`,
                         mixedSentence: `这是一个关于 ${text} (示例释义1) 的句子。`,
                         dictionaryExample: `Example usage of ${text}.`,
                         dictionaryExampleTranslation: `关于 ${text} 的例句用法。`
-                    },
-                    // Add a second meaning for testing multiselect
-                    {
-                        translation: "示例释义2 (Mock)",
-                        contextSentence: `Another context for ${text}.`,
-                        mixedSentence: `另一个 ${text} (示例释义2) 的句子。`,
-                        dictionaryExample: `Second example of ${text}.`,
-                        dictionaryExampleTranslation: `关于 ${text} 的第二个例句。`
                     }
                 ]
               };
@@ -250,52 +245,57 @@ export default defineBackground(() => {
               return;
           }
 
-          if (engine.id === 'tencent') {
-             // 1. Fetch Real Dictionary Data First
-             const dictData = await fetchEnglishDictionaryData(text);
+          // 1. Fetch Real Dictionary Data First (Always, to get definitions and sentences)
+          const dictData = await fetchEnglishDictionaryData(text);
 
-             // 2. Prepare Meanings
-             let meanings = [];
+          // 2. Prepare Meanings
+          let meanings: { 
+              translation: string; 
+              partOfSpeech?: string;
+              contextSentence: string; 
+              mixedSentence: string; 
+              dictionaryExample: string;
+              dictionaryExampleTranslation: string;
+          }[] = [];
 
-             if (dictData && dictData.definitions.length > 0) {
-                 // Use dictionary definitions
-                 // We attach the first example to all definitions for now, 
-                 // as we can't easily map sentences to specific definitions without NLP.
-                 const firstSent = dictData.sentences[0] || { orig: '', trans: '' };
-                 
-                 meanings = dictData.definitions.map(def => ({
-                     translation: `${def.part} ${def.means.join('; ')}`.trim(),
-                     partOfSpeech: def.part,
-                     contextSentence: '',
-                     mixedSentence: '',
-                     dictionaryExample: firstSent.orig,
-                     dictionaryExampleTranslation: firstSent.trans
-                 }));
-             } else {
-                 // Fallback: Translate using Tencent if no dict data
-                 const res = await callTencentTranslation(engine, text, 'zh');
-                 const trans = res.Response?.TargetText || "API Error";
-                 meanings.push({
-                     translation: trans,
-                     contextSentence: '',
-                     mixedSentence: '',
-                     dictionaryExample: '',
-                     dictionaryExampleTranslation: ''
-                 });
-             }
-
-             const result = {
-                 text: text,
-                 phoneticUs: dictData?.phoneticUs || '',
-                 phoneticUk: dictData?.phoneticUk || '',
-                 meanings: meanings
-             };
-             sendResponse({ success: true, data: result });
-
-          } else {
-             // AI Engines (Placeholder)
-             throw new Error(`Engine ${engine.name} does not support dictionary lookup yet.`);
+          if (dictData && dictData.definitions.length > 0) {
+              // Map EACH definition to a potential meaning entry
+              // This ensures "book" -> "n. 书籍", "v. 预订" are separate entries
+              const firstSent = dictData.sentences[0] || { orig: '', trans: '' };
+              
+              meanings = dictData.definitions.map(def => {
+                  // Format translation as "n. definition"
+                  const formattedTranslation = def.part ? `${def.part} ${def.means.join('; ')}` : def.means.join('; ');
+                  
+                  return {
+                      translation: formattedTranslation.trim(),
+                      partOfSpeech: def.part,
+                      contextSentence: '', // Filled by caller if needed later or empty
+                      mixedSentence: '',
+                      dictionaryExample: firstSent.orig,
+                      dictionaryExampleTranslation: firstSent.trans
+                  };
+              });
+          } else if (engine.id === 'tencent') {
+              // Fallback: Translate using Tencent if no dict data found
+              const res = await callTencentTranslation(engine, text, 'zh');
+              const trans = res.Response?.TargetText || "API Error";
+              meanings.push({
+                  translation: trans,
+                  contextSentence: '',
+                  mixedSentence: '',
+                  dictionaryExample: '',
+                  dictionaryExampleTranslation: ''
+              });
           }
+
+          const result = {
+              text: text,
+              phoneticUs: dictData?.phoneticUs || '',
+              phoneticUk: dictData?.phoneticUk || '',
+              meanings: meanings
+          };
+          sendResponse({ success: true, data: result });
 
         } catch (error: any) {
           console.error('ContextLingo Background Error:', error);
