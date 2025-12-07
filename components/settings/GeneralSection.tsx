@@ -92,7 +92,7 @@ export const GeneralSection: React.FC<GeneralSectionProps> = ({ config, setConfi
               </div>
               <div>
                   <h3 className="font-bold text-slate-900">智能匹配词态变化</h3>
-                  <p className="text-xs text-slate-500 mt-1">自动识别单词的复数、过去式、进行时等变形（如 eat -> eating），增加替换覆盖率。</p>
+                  <p className="text-xs text-slate-500 mt-1">自动识别单词的复数、过去式、进行时等变形（如 eat &rarr; eating），增加替换覆盖率。</p>
               </div>
            </div>
            <label className="relative inline-flex items-center cursor-pointer">
