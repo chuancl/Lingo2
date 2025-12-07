@@ -1,8 +1,4 @@
 
-
-
-
-
 import { StyleConfig, WordCategory, Scenario, TranslationEngine, WordInteractionConfig, PageWidgetConfig, AnkiConfig, OriginalTextConfig, MergeStrategyConfig, AutoTranslateConfig, DictionaryEngine } from './types';
 
 export const DEFAULT_STYLE: StyleConfig = {

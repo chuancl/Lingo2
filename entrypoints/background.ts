@@ -67,7 +67,7 @@ export default defineBackground(() => {
                   const sentences = (data.sent || []).map((s: any) => ({
                       orig: s.orig ? s.orig.trim() : "",
                       trans: s.trans ? s.trans.trim() : ""
-                  })).filter((s: any) => s.orig.length > 8 && s.orig.includes(' ')); // Ensure it's a real sentence
+                  })).filter((s: any) => s.orig.length > 8 && s.orig.includes(' ') && s.trans); 
 
                   // Extract Inflections (Exchange)
                   let inflections: string[] = [];
@@ -161,7 +161,7 @@ export default defineBackground(() => {
                   }
                   
                   // Filter Youdao sentences too
-                  sentences = sentences.filter(s => s.orig.length > 8 && s.orig.includes(' '));
+                  sentences = sentences.filter(s => s.orig.length > 8 && s.orig.includes(' ') && s.trans);
 
                   // Extract Inflections
                   const inflections: string[] = [];
@@ -230,7 +230,6 @@ export default defineBackground(() => {
   };
 
   // Improved Sentence Assigner: Tries to find a sentence that matches the definition keywords
-  // AND avoids reusing sentences if possible.
   const smartAssignSentence = (
       sentences: { orig: string; trans: string }[], 
       definitionKeywords: string[],
@@ -238,6 +237,8 @@ export default defineBackground(() => {
   ) => {
       if (!sentences || sentences.length === 0) return { orig: '', trans: '' };
       
+      const STOP_WORDS = new Set(['的', '了', '是', '在', '和', '与', '或', '一', '个']);
+
       // 1. Try to find a sentence that contains one of the definition keywords in its translation
       for (let i = 0; i < sentences.length; i++) {
           if (usedIndices.has(i)) continue; // Skip used sentences
@@ -246,27 +247,39 @@ export default defineBackground(() => {
           if (!sent.trans) continue;
 
           for (const keyword of definitionKeywords) {
-              // Only check keywords longer than 1 char to avoid noise, unless definition itself is 1 char
-              if (keyword.length > 1 || definitionKeywords.length === 1) {
-                  if (sent.trans.includes(keyword)) {
-                      usedIndices.add(i);
-                      return sent;
+              // Full keyword match (e.g. "预订")
+              if (keyword.length > 0 && sent.trans.includes(keyword)) {
+                  usedIndices.add(i);
+                  return sent;
+              }
+
+              // Partial Character Match (for cases like "预订" matching "订了票")
+              // Only apply if keyword has length >= 2 to avoid single char noise (like "书" matching "书写")
+              if (keyword.length >= 2) {
+                  // Split keyword into chars
+                  const chars = keyword.split('');
+                  // If ANY significant char is found in sentence
+                  for (const char of chars) {
+                      if (!STOP_WORDS.has(char) && sent.trans.includes(char)) {
+                          usedIndices.add(i);
+                          return sent;
+                      }
                   }
               }
           }
       }
 
-      // 2. Fallback: Find first UNUSED sentence (to avoid duplication across meanings)
-      for (let i = 0; i < sentences.length; i++) {
-          if (!usedIndices.has(i)) {
-              usedIndices.add(i);
-              return sentences[i];
-          }
+      // 2. If no match found, DO NOT pick a random unused one if we have multiple meanings.
+      // Returning an empty/dummy object effectively means "no example available for this specific meaning",
+      // which is better than showing a wrong example.
+      // However, if it's the VERY FIRST meaning (empty usedIndices), we might want to return *something*.
+      if (usedIndices.size === 0 && sentences.length > 0) {
+           usedIndices.add(0);
+           return sentences[0];
       }
 
-      // 3. Ultimate Fallback: Reuse if we ran out of unique sentences
-      // Return the first one but don't mark as "used" (since it's already used or we don't care anymore)
-      return sentences[0];
+      // Return empty to indicate no suitable match
+      return { orig: '', trans: '' };
   };
 
   // Helper to extract keywords from meaning array
@@ -275,6 +288,7 @@ export default defineBackground(() => {
       return means.flatMap(m => m.split(/[,，;；]/))
           .map(s => s.replace(/^[a-z]+\.\s*/, '')) // Remove start "n. "
           .map(s => s.replace(/[（(].*?[)）]/g, '')) // Remove (brackets)
+          .map(s => s.replace(/[\[【].*?[\]】]/g, '')) // Remove [brackets]
           .map(s => s.trim())
           .filter(s => s.length > 0);
   };

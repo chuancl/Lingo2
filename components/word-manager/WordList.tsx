@@ -113,7 +113,7 @@ export const WordList: React.FC<WordListProps> = ({
                                {group.map((entry, idx) => {
                                   // For non-inflections (sentences), apply "showMultiExamples" restriction
                                   if (item.id !== 'inflections' && !mergeConfig.showMultiExamples && idx > 0) return null;
-                                  // For inflections, we only show once per group (assuming inflections are shared or we pick first one)
+                                  // For inflections, we only show once per group
                                   if (item.id === 'inflections' && idx > 0) return null;
 
                                   if (item.id === 'context' && entry.contextSentence) {
