@@ -66,6 +66,7 @@ export interface WordEntry {
   mixedSentence?: string;
   dictionaryExample?: string;
   dictionaryExampleTranslation?: string; // 词典例句的翻译 (New)
+  inflections?: string[]; // New: Word variations (eating, ate, eaten, etc.)
   scenarioId?: string;
   category: WordCategory; // Added explicitly to ease data management
 }
@@ -187,6 +188,7 @@ export interface PageWidgetConfig {
   // New Display Toggles
   showExampleTranslation: boolean; // Show translation for Dictionary Examples
   showContextTranslation: boolean; // Show translation for Context Sentences
+  showInflections: boolean; // New: Show inflections in widget
 
   showSections: {
     known: boolean;
@@ -200,6 +202,7 @@ export interface AutoTranslateConfig {
   enabled: boolean;
   bilingualMode: boolean; 
   translateWholePage: boolean; // New setting for scanning scope
+  matchInflections: boolean; // New: Smart morphology matching
   blacklist: string[];
   whitelist: string[];
   ttsSpeed: number;

@@ -1,8 +1,10 @@
 
 
+
+
 import React, { useState } from 'react';
 import { AutoTranslateConfig } from '../../types';
-import { ShieldAlert, ShieldCheck, X, Mic2, SplitSquareHorizontal, Scan } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, X, Mic2, SplitSquareHorizontal, Scan, Workflow } from 'lucide-react';
 
 interface GeneralSectionProps {
   config: AutoTranslateConfig;
@@ -76,6 +78,28 @@ export const GeneralSection: React.FC<GeneralSectionProps> = ({ config, setConfi
                 type="checkbox" 
                 checked={config.translateWholePage} 
                 onChange={e => setConfig({...config, translateWholePage: e.target.checked})} 
+                className="sr-only peer" 
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+           </label>
+        </div>
+
+        {/* Morphology Matching Toggle */}
+        <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-100">
+           <div className="flex items-start gap-3">
+              <div className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm text-blue-600">
+                  <Workflow className="w-5 h-5" />
+              </div>
+              <div>
+                  <h3 className="font-bold text-slate-900">智能匹配词态变化</h3>
+                  <p className="text-xs text-slate-500 mt-1">自动识别单词的复数、过去式、进行时等变形（如 eat -> eating），增加替换覆盖率。</p>
+              </div>
+           </div>
+           <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={config.matchInflections} 
+                onChange={e => setConfig({...config, matchInflections: e.target.checked})} 
                 className="sr-only peer" 
               />
               <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>

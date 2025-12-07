@@ -1,5 +1,7 @@
 
 
+
+
 import ReactDOM from 'react-dom/client';
 import React, { useState, useEffect, useRef } from 'react';
 import { PageWidget } from '../../components/PageWidget';
@@ -519,8 +521,19 @@ export default defineContentScript({
 
             // 2. Verification & Fuzzy Matching logic for Word Replacement
             const verifiedEntries = currentEntries.filter(entry => {
-                // Simple check: does the English word appear in the translation?
-                return translatedText.toLowerCase().includes(entry.text.toLowerCase());
+                const text = entry.text.toLowerCase();
+                const targetLower = translatedText.toLowerCase();
+
+                // Direct Match (Base Word)
+                if (targetLower.includes(text)) return true;
+
+                // Smart Morphology Matching
+                if (currentAutoTranslate.matchInflections && entry.inflections) {
+                    // Check if any inflection exists in the translation (e.g. 'eating', 'ate')
+                    return entry.inflections.some(infl => targetLower.includes(infl.toLowerCase()));
+                }
+
+                return false;
             });
 
             if (verifiedEntries.length === 0) {

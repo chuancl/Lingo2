@@ -1,5 +1,7 @@
 
 
+
+
 import { TranslationEngine, WordEntry, WordCategory } from "../types";
 import { browser } from "wxt/browser";
 
@@ -7,6 +9,7 @@ interface DictionaryResult {
   text: string;
   phoneticUs: string;
   phoneticUk: string;
+  inflections?: string[]; // New
   meanings: {
     translation: string;
     partOfSpeech?: string; 
@@ -108,6 +111,7 @@ export const fetchWordDetails = async (
     text: result.text, // Use returned casing
     phoneticUs: result.phoneticUs,
     phoneticUk: result.phoneticUk,
+    inflections: result.inflections, // Pass inflections
     translation: m.translation,
     contextSentence: m.contextSentence,
     mixedSentence: m.mixedSentence,

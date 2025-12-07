@@ -1,5 +1,7 @@
 
 
+
+
 import { defineBackground } from 'wxt/sandbox';
 import { browser } from 'wxt/browser';
 import { callTencentTranslation } from '../utils/api';
@@ -11,6 +13,7 @@ interface DictData {
     phoneticUk: string;
     definitions: { part: string; means: string[] }[];
     sentences: { orig: string; trans: string }[];
+    inflections: string[];
 }
 
 export default defineBackground(() => {
@@ -69,11 +72,26 @@ export default defineBackground(() => {
                       trans: s.trans ? s.trans.trim() : ""
                   })).filter((s: any) => s.orig.length > 8 && s.orig.includes(' ')); // Ensure it's a real sentence
 
+                  // Extract Inflections (Exchange)
+                  let inflections: string[] = [];
+                  if (data.exchange) {
+                      // exchange is often { word_pl: [...], word_past: [...], ... }
+                      Object.values(data.exchange).forEach((val: any) => {
+                          if (Array.isArray(val)) {
+                              inflections.push(...val);
+                          } else if (typeof val === 'string' && val.trim()) {
+                              inflections.push(val);
+                          }
+                      });
+                  }
+                  inflections = [...new Set(inflections)]; // Dedupe
+
                   return {
                       phoneticUs: symbol.ph_am ? `/${symbol.ph_am}/` : '',
                       phoneticUk: symbol.ph_en ? `/${symbol.ph_en}/` : '',
                       definitions,
-                      sentences
+                      sentences,
+                      inflections
                   };
               }
 
@@ -147,8 +165,13 @@ export default defineBackground(() => {
                   // Filter Youdao sentences too
                   sentences = sentences.filter(s => s.orig.length > 8 && s.orig.includes(' '));
 
+                  // Extract Inflections
+                  // Youdao's simple.word[0].exchange might contain data, but JSONAPI often hides it in other chunks.
+                  // We'll leave empty for Youdao default parsing unless it's easy to find.
+                  const inflections: string[] = [];
+
                   if (phoneticUs || phoneticUk || definitions.length > 0) {
-                      return { phoneticUs, phoneticUk, definitions, sentences };
+                      return { phoneticUs, phoneticUk, definitions, sentences, inflections };
                   }
               }
 
@@ -176,12 +199,14 @@ export default defineBackground(() => {
                   
                   const example = entry.meanings?.[0]?.definitions?.find((d: any) => d.example)?.example || '';
                   const sentences = example ? [{ orig: example, trans: '' }] : [];
+                  const inflections: string[] = []; // FreeDict API doesn't provide easy inflection list
 
                   return {
                       phoneticUs: usPhonetic,
                       phoneticUk: ukPhonetic,
                       definitions,
-                      sentences
+                      sentences,
+                      inflections
                   };
               } 
               
@@ -195,6 +220,32 @@ export default defineBackground(() => {
           }
       }
       return null;
+  };
+
+  // Helper to pick the best sentence for a given definition/part of speech
+  const smartAssignSentence = (
+      sentences: { orig: string; trans: string }[], 
+      partOfSpeech: string, 
+      idx: number
+  ) => {
+      if (sentences.length === 0) return { orig: '', trans: '' };
+      
+      // Simple Cycle fallback
+      const defaultSent = sentences[idx % sentences.length];
+
+      // Smart Matching Logic:
+      // If POS is verb (v.), try to find sentence with -ing, -ed, or just the word
+      // If POS is noun (n.), try to find sentence where word is likely noun (harder, so mostly rely on cycle)
+      
+      // Since we don't have deep NLP here, the cycling index strategy `idx % sentences.length` 
+      // is actually often effective IF the dictionary returns sentences in an order corresponding to definitions.
+      // However, if we suspect the first N sentences are all for meaning 1, we should try to space them out.
+      
+      // Heuristic: If we have enough sentences, try to pick one that hasn't been used by previous definitions if possible.
+      // But here we are processing map() so we don't know global usage easily without context.
+      
+      // Let's stick to the cycle but ensure we filter out bad ones.
+      return defaultSent;
   };
 
   // Message Handler for API Requests
@@ -231,6 +282,7 @@ export default defineBackground(() => {
                 text: text,
                 phoneticUs: `/${text}US/`,
                 phoneticUk: `/${text}UK/`,
+                inflections: [`${text}ing`, `${text}ed`, `${text}s`],
                 meanings: [
                     {
                         translation: preferredTranslation || "n. 示例释义1",
@@ -263,17 +315,15 @@ export default defineBackground(() => {
           if (dictData && dictData.definitions.length > 0) {
               // Map EACH definition to a potential meaning entry
               // This ensures "book" -> "n. 书籍", "v. 预订" are separate entries
-              
-              // We distribute sentences across meanings if possible, or just repeat them if we only have one good one
-              // For simplicity, we assign the best sentence to all, or cycle through if we have multiple
               const validSentences = dictData.sentences;
               
               meanings = dictData.definitions.map((def, idx) => {
                   // Format translation as "n. definition"
                   const formattedTranslation = def.part ? `${def.part} ${def.means.join('; ')}` : def.means.join('; ');
                   
-                  // Try to pick a different example for different meanings if available, else reuse the first one
-                  const sent = validSentences[idx % validSentences.length] || { orig: '', trans: '' };
+                  // Use Cyclic Assignment to ensure distinct definitions get distinct sentences (if available)
+                  // e.g. Def 0 -> Sent 0, Def 1 -> Sent 1
+                  const sent = validSentences.length > 0 ? validSentences[idx % validSentences.length] : { orig: '', trans: '' };
 
                   return {
                       translation: formattedTranslation.trim(),
@@ -301,6 +351,7 @@ export default defineBackground(() => {
               text: text,
               phoneticUs: dictData?.phoneticUs || '',
               phoneticUk: dictData?.phoneticUk || '',
+              inflections: dictData?.inflections || [],
               meanings: meanings
           };
           sendResponse({ success: true, data: result });

@@ -1,4 +1,6 @@
 
+
+
 import React, { useState } from 'react';
 import { TranslationEngine, WordEntry, StyleConfig, WordCategory, OriginalTextConfig, AutoTranslateConfig } from '../../types';
 import { RefreshCw, Play, AlertCircle, Zap, SplitSquareHorizontal } from 'lucide-react';
@@ -47,10 +49,20 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({ engines, entries
                 return;
             }
 
-            // STEP 2: English Verification (Context Check)
+            // STEP 2: Verification (Context Check with Inflections)
             const verifiedEntries = entries.filter(e => {
                 const engWord = e.text.toLowerCase();
-                return apiResult.toLowerCase().includes(engWord);
+                const targetText = apiResult.toLowerCase();
+                
+                // Direct match
+                if (targetText.includes(engWord)) return true;
+
+                // Inflection match
+                if (autoTranslateConfig.matchInflections && e.inflections) {
+                    return e.inflections.some(infl => targetText.includes(infl.toLowerCase()));
+                }
+
+                return false;
             });
 
             // STEP 3: Chinese Alignment & Fuzzy Matching (Using Shared Logic)
@@ -133,7 +145,7 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({ engines, entries
                         </div>
                     </div>
                     <p className="text-xs text-slate-400 flex items-center">
-                        <Zap className="w-3 h-3 mr-1"/> 提示: 只有当 API 译文中出现了词库里的英文词，才会执行替换。
+                        <Zap className="w-3 h-3 mr-1"/> 提示: 只有当 API 译文中出现了词库里的英文词（或其变形），才会执行替换。
                     </p>
                 </div>
 
@@ -141,11 +153,18 @@ export const PreviewSection: React.FC<PreviewSectionProps> = ({ engines, entries
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">插件替换效果</label>
-                        {autoTranslateConfig.bilingualMode && (
-                            <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 flex items-center font-medium">
-                                <SplitSquareHorizontal className="w-3 h-3 mr-1" /> 双语对照已启用
-                            </span>
-                        )}
+                        <div className="flex gap-2">
+                            {autoTranslateConfig.matchInflections && (
+                                <span className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded border border-purple-100 flex items-center font-medium">
+                                    <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mr-1.5"></span> 词态匹配
+                                </span>
+                            )}
+                            {autoTranslateConfig.bilingualMode && (
+                                <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 flex items-center font-medium">
+                                    <SplitSquareHorizontal className="w-3 h-3 mr-1" /> 双语对照
+                                </span>
+                            )}
+                        </div>
                     </div>
                     
                     <div className="p-6 bg-white border border-slate-200 rounded-xl text-base leading-loose text-slate-800 min-h-[16rem] shadow-sm relative">

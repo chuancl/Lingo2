@@ -1,5 +1,7 @@
 
 
+
+
 import { StyleConfig, WordCategory, Scenario, TranslationEngine, WordInteractionConfig, PageWidgetConfig, AnkiConfig, OriginalTextConfig, MergeStrategyConfig, AutoTranslateConfig, DictionaryEngine } from './types';
 
 export const DEFAULT_STYLE: StyleConfig = {
@@ -146,6 +148,7 @@ export const DEFAULT_PAGE_WIDGET: PageWidgetConfig = {
   
   showExampleTranslation: true,
   showContextTranslation: true,
+  showInflections: true,
 
   showSections: {
     known: false,
@@ -163,7 +166,8 @@ export const DEFAULT_AUTO_TRANSLATE: AutoTranslateConfig = {
   enabled: true,
   bilingualMode: false,
   translateWholePage: false,
-  blacklist: ['google.com', 'baidu.com'], // Removed .*\\.cn$ to allow Chinese sites
+  matchInflections: true, // Default Enabled
+  blacklist: ['google.com', 'baidu.com'], 
   whitelist: ['nytimes.com', 'medium.com'],
   ttsSpeed: 1.0,
 };
