@@ -1,4 +1,5 @@
 
+
 import { TranslationEngine, WordEntry, WordCategory } from "../types";
 import { browser } from "wxt/browser";
 
@@ -90,7 +91,7 @@ export const fetchWordDetails = async (
         return scoreB - scoreA;
     });
     
-    // Take the top match if it exists
+    // Take the top match if it exists and has a reasonable score, otherwise stick with top 1
     if (sorted.length > 0) {
         selectedMeanings = [sorted[0]];
     }

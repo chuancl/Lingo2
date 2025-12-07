@@ -1,4 +1,5 @@
 
+
 import { defineBackground } from 'wxt/sandbox';
 import { browser } from 'wxt/browser';
 import { callTencentTranslation } from '../utils/api';
@@ -56,15 +57,17 @@ export default defineBackground(() => {
 
                   const symbol = data.symbols[0];
                   
+                  // Extract definitions with Part of Speech
                   const definitions = (symbol.parts || []).map((p: any) => ({
                       part: p.part ? (p.part.endsWith('.') ? p.part : p.part + '.') : '', // Normalize POS
                       means: p.means || [] // Array of strings
                   }));
 
+                  // Extract sentences and FILTER out bad ones (short or single word)
                   const sentences = (data.sent || []).map((s: any) => ({
                       orig: s.orig ? s.orig.trim() : "",
                       trans: s.trans ? s.trans.trim() : ""
-                  }));
+                  })).filter((s: any) => s.orig.length > 8 && s.orig.includes(' ')); // Ensure it's a real sentence
 
                   return {
                       phoneticUs: symbol.ph_am ? `/${symbol.ph_am}/` : '',
@@ -133,17 +136,16 @@ export default defineBackground(() => {
                   }
 
                   // Sentences
-                  const sentences: { orig: string; trans: string }[] = [];
+                  let sentences: { orig: string; trans: string }[] = [];
                   if (data.blng_sents_part && data.blng_sents_part['sentence-pair']) {
-                      data.blng_sents_part['sentence-pair'].forEach((pair: any) => {
-                          if (pair.sentence && pair['sentence-translation']) {
-                              sentences.push({
-                                  orig: pair.sentence,
-                                  trans: pair['sentence-translation']
-                              });
-                          }
-                      });
+                      sentences = data.blng_sents_part['sentence-pair'].map((pair: any) => ({
+                          orig: pair.sentence || "",
+                          trans: pair['sentence-translation'] || ""
+                      }));
                   }
+                  
+                  // Filter Youdao sentences too
+                  sentences = sentences.filter(s => s.orig.length > 8 && s.orig.includes(' '));
 
                   if (phoneticUs || phoneticUk || definitions.length > 0) {
                       return { phoneticUs, phoneticUk, definitions, sentences };
@@ -261,19 +263,25 @@ export default defineBackground(() => {
           if (dictData && dictData.definitions.length > 0) {
               // Map EACH definition to a potential meaning entry
               // This ensures "book" -> "n. 书籍", "v. 预订" are separate entries
-              const firstSent = dictData.sentences[0] || { orig: '', trans: '' };
               
-              meanings = dictData.definitions.map(def => {
+              // We distribute sentences across meanings if possible, or just repeat them if we only have one good one
+              // For simplicity, we assign the best sentence to all, or cycle through if we have multiple
+              const validSentences = dictData.sentences;
+              
+              meanings = dictData.definitions.map((def, idx) => {
                   // Format translation as "n. definition"
                   const formattedTranslation = def.part ? `${def.part} ${def.means.join('; ')}` : def.means.join('; ');
                   
+                  // Try to pick a different example for different meanings if available, else reuse the first one
+                  const sent = validSentences[idx % validSentences.length] || { orig: '', trans: '' };
+
                   return {
                       translation: formattedTranslation.trim(),
                       partOfSpeech: def.part,
                       contextSentence: '', // Filled by caller if needed later or empty
                       mixedSentence: '',
-                      dictionaryExample: firstSent.orig,
-                      dictionaryExampleTranslation: firstSent.trans
+                      dictionaryExample: sent.orig,
+                      dictionaryExampleTranslation: sent.trans
                   };
               });
           } else if (engine.id === 'tencent') {

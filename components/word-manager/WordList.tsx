@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { WordEntry, WordCategory, MergeStrategyConfig, WordTab } from '../../types';
 import { PlayCircle, MapPin, ExternalLink, Filter } from 'lucide-react';
@@ -35,7 +36,6 @@ export const WordList: React.FC<WordListProps> = ({
           {groupedEntries.map(group => {
             const primary = group[0];
             const uniqueTranslations = Array.from(new Set(group.map(e => e.translation?.trim()).filter(Boolean)));
-            // Join translations for display if needed, but primary display uses uniqueTranslations
             const displayTranslation = uniqueTranslations.join('; ');
 
             return (
@@ -50,9 +50,10 @@ export const WordList: React.FC<WordListProps> = ({
                 </div>
 
                 <div className="flex-1 space-y-4">
-                    {/* Header Row: Flex container to align Text/Phonetic/Meaning left, and Badge right */}
+                    {/* Header Row: Flex container */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       
+                      {/* Left: Word, Phonetic, Meaning */}
                       <div className="flex items-center gap-3 flex-wrap">
                           <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{primary.text}</h3>
                           
@@ -94,7 +95,7 @@ export const WordList: React.FC<WordListProps> = ({
                           )}
                       </div>
 
-                      {/* Badge always on the far right */}
+                      {/* Right: Badge (Always visible on far right) */}
                       <div className="ml-auto sm:ml-0 self-start sm:self-center">
                            <span className={`text-[10px] px-2 py-0.5 rounded-full border whitespace-nowrap ${
                              primary.category === WordCategory.KnownWord ? 'bg-green-50 text-green-700 border-green-200' :

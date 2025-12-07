@@ -74,22 +74,22 @@ export const INITIAL_ENGINES: TranslationEngine[] = [
 
 export const INITIAL_DICTIONARIES: DictionaryEngine[] = [
   { 
-    id: 'youdao', 
-    name: '有道词典 (Youdao)', 
-    endpoint: 'https://dict.youdao.com/jsonapi', 
-    link: 'https://dict.youdao.com/',
-    isEnabled: true, 
-    priority: 1, // Changed to 1
-    description: '网易出品，国内访问稳定，词库量大。'
-  },
-  { 
     id: 'iciba', 
     name: '金山词霸 (ICBA)', 
     endpoint: 'https://dict-co.iciba.com/api/dictionary.php',
     link: 'http://www.iciba.com/',
     isEnabled: true, 
-    priority: 2, // Changed to 2
+    priority: 1, // PRIMARY
     description: '国内访问速度快，数据详实，包含英/美音标及双语例句。'
+  },
+  { 
+    id: 'youdao', 
+    name: '有道词典 (Youdao)', 
+    endpoint: 'https://dict.youdao.com/jsonapi', 
+    link: 'https://dict.youdao.com/',
+    isEnabled: true, 
+    priority: 2, // SECONDARY
+    description: '网易出品，国内访问稳定，词库量大。'
   },
   { 
     id: 'free-dict', 
