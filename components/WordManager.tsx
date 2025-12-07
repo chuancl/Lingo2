@@ -176,7 +176,6 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
   const handleDeleteSelected = () => {
     if (selectedWords.size === 0) return;
 
-    // 逻辑修复：如果在“正在学”Tab，删除操作意味着“移出正在学”，即变更为“想学习”
     if (activeTab === WordCategory.LearningWord) {
         if (confirm(`确定不再将选中的 ${selectedWords.size} 个单词标记为“正在学”吗？\n它们将保留在“想学习”列表 (子集关系)。`)) {
             const newEntries = entries.map(e => {
@@ -192,7 +191,6 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
         return;
     }
 
-    // 逻辑修复：如果在“想学习”Tab (包含想学和正在学)，或者其他Tab，则是彻底删除
     let confirmMsg = `确定从当前列表删除选中的 ${selectedWords.size} 个单词吗？`;
     if (activeTab === WordCategory.WantToLearnWord) {
         confirmMsg = `确定彻底删除选中的 ${selectedWords.size} 个单词吗？\n注意：“正在学”是“想学习”的子集，删除后将同步从“正在学”中移除。`;
@@ -267,14 +265,10 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
            }
         } catch (err) {
            // Fallback to TXT
-           // Supports: "apple, banana, orange" OR "apple 苹果, banana 香蕉"
-           // Split by common delimiters: newline, comma, Chinese comma
            const parts = text.split(/[\n,，]+/).filter(p => p.trim());
            
            candidates = parts.map(part => {
                const cleaned = part.trim();
-               // Regex to find "EnglishWord [Spaces] ChineseTranslation"
-               // Looks for English part at start, optional space, then Chinese/Other part
                const match = cleaned.match(/^([a-zA-Z0-9\-\s]+?)(?:\s+([\u4e00-\u9fa5].*))?$/);
                if (match) {
                    return {
@@ -282,7 +276,6 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                        translation: match[2]?.trim()
                    };
                }
-               // If no chinese found, assume whole thing is word
                return { text: cleaned };
            });
         }
@@ -296,18 +289,17 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
             return;
         }
 
-        // Process in batches or sequential to avoid rate limits? 
-        // For now, sequential to be safe with AI engines.
         let successCount = 0;
         let conflictCount = 0;
         let duplicateCount = 0;
         let failCount = 0;
+        let promotedCount = 0;
 
         showToast(`开始处理 ${candidates.length} 个单词，请稍候...`, 'info');
 
         const newEntriesToAdd: WordEntry[] = [];
+        const entriesToUpdate: WordEntry[] = [];
 
-        // We process import by reusing the logic: fetch details -> check existence -> add
         for (const candidate of candidates) {
             if (!candidate.text) continue;
             
@@ -317,6 +309,9 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
 
                 for (const details of detailsList) {
                      if (!details.text || !details.translation) continue;
+
+                     const dText = details.text.toLowerCase().trim();
+                     const dTrans = details.translation.trim();
 
                      // 2. Check Exclusivity (Known vs Learning/Want)
                      if (targetCategory === WordCategory.WantToLearnWord || targetCategory === WordCategory.LearningWord) {
@@ -332,15 +327,45 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                         }
                      }
 
-                     // 3. Check Duplicate in current list
+                     // 3. Special: Learning vs WantToLearn Promotion / De-duplication
+                     if (targetCategory === WordCategory.LearningWord) {
+                        // If exists in WantToLearn, Promote it
+                        const existingWant = entries.find(e => 
+                            e.category === WordCategory.WantToLearnWord && 
+                            e.text.toLowerCase().trim() === dText &&
+                            e.translation?.trim() === dTrans
+                        );
+                        if (existingWant) {
+                            if (!entriesToUpdate.some(u => u.id === existingWant.id)) {
+                                entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord });
+                                promotedCount++;
+                            }
+                            continue; 
+                        }
+                     }
+
+                     // If Adding to WantToLearn, check if already in Learning (subset logic)
+                     if (targetCategory === WordCategory.WantToLearnWord) {
+                         const existingLearning = entries.find(e => 
+                            e.category === WordCategory.LearningWord && 
+                            e.text.toLowerCase().trim() === dText &&
+                            e.translation?.trim() === dTrans
+                         );
+                         if (existingLearning) {
+                             duplicateCount++;
+                             continue;
+                         }
+                     }
+
+                     // 4. Check Duplicate in current list or pending new entries
                      const existsInTarget = entries.some(e => 
                         e.category === targetCategory && 
-                        e.text.toLowerCase().trim() === details.text!.toLowerCase().trim() &&
-                        e.translation?.trim() === details.translation!.trim()
+                        e.text.toLowerCase().trim() === dText &&
+                        e.translation?.trim() === dTrans
                      ) || newEntriesToAdd.some(e => 
                         e.category === targetCategory && 
-                        e.text.toLowerCase().trim() === details.text!.toLowerCase().trim() &&
-                        e.translation?.trim() === details.translation!.trim()
+                        e.text.toLowerCase().trim() === dText &&
+                        e.translation?.trim() === dTrans
                      );
 
                      if (existsInTarget) {
@@ -371,11 +396,23 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
             }
         }
 
-        if (newEntriesToAdd.length > 0) {
-            setEntries(prev => [...prev, ...newEntriesToAdd]);
-            showToast(`导入完成: 成功 ${successCount}, 重复 ${duplicateCount}, 互斥跳过 ${conflictCount}, 失败 ${failCount}`, 'success');
+        // Batch Update State
+        if (newEntriesToAdd.length > 0 || entriesToUpdate.length > 0) {
+            setEntries(prev => {
+                let next = [...prev];
+                // Apply Updates
+                if (entriesToUpdate.length > 0) {
+                    next = next.map(p => {
+                        const update = entriesToUpdate.find(u => u.id === p.id);
+                        return update ? update : p;
+                    });
+                }
+                // Append New
+                return [...next, ...newEntriesToAdd];
+            });
+            showToast(`导入完成: 新增 ${successCount}, 晋升/更新 ${promotedCount}, 重复 ${duplicateCount}, 互斥跳过 ${conflictCount}, 失败 ${failCount}`, 'success');
         } else {
-             showToast(`导入结束，未添加任何新词 (重复/互斥/失败)`, 'warning');
+             showToast(`导入结束，未添加任何新词`, 'warning');
         }
      };
      reader.readAsText(file);
@@ -404,11 +441,15 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
 
          const targetCategory = activeTab === 'all' ? WordCategory.WantToLearnWord : activeTab;
          const newEntriesToAdd: WordEntry[] = [];
+         const entriesToUpdate: WordEntry[] = [];
          let conflictCount = 0;
          let duplicateCount = 0;
+         let promotedCount = 0;
 
          for (const details of detailsList) {
              if (!details.text || !details.translation) continue;
+             const dText = details.text.toLowerCase().trim();
+             const dTrans = details.translation.trim();
 
              // 2. Logic for adding to Want/Learning -> Check Known
              if (targetCategory === WordCategory.WantToLearnWord || targetCategory === WordCategory.LearningWord) {
@@ -426,15 +467,50 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                      continue;
                  }
              }
+
+             // 4. Special: Learning vs WantToLearn Promotion
+             if (targetCategory === WordCategory.LearningWord) {
+                 // If exists in WantToLearn, Promote it
+                 const existingWant = entries.find(e => 
+                    e.category === WordCategory.WantToLearnWord && 
+                    e.text.toLowerCase().trim() === dText &&
+                    e.translation?.trim() === dTrans
+                 );
+                 if (existingWant) {
+                     if (!entriesToUpdate.some(u => u.id === existingWant.id)) {
+                         entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord });
+                         promotedCount++;
+                     }
+                     continue;
+                 }
+             }
+
+             // If Adding to WantToLearn, check if already in Learning
+             if (targetCategory === WordCategory.WantToLearnWord) {
+                  const existingLearning = entries.find(e => 
+                    e.category === WordCategory.LearningWord && 
+                    e.text.toLowerCase().trim() === dText &&
+                    e.translation?.trim() === dTrans
+                 );
+                 if (existingLearning) {
+                     duplicateCount++;
+                     continue;
+                 }
+             }
              
-             // 4. Check duplicate in current category
+             // 5. Check duplicate in current category
              const existsInTarget = entries.some(e => 
                 e.category === targetCategory && 
-                e.text.toLowerCase().trim() === details.text!.toLowerCase().trim() &&
-                e.translation?.trim() === details.translation!.trim()
+                e.text.toLowerCase().trim() === dText &&
+                e.translation?.trim() === dTrans
              );
              if (existsInTarget) {
                  duplicateCount++;
+                 continue;
+             }
+             
+             // Check against newEntriesToAdd
+             if (newEntriesToAdd.some(e => e.text.toLowerCase().trim() === dText && e.translation?.trim() === dTrans)) {
                  continue;
              }
 
@@ -457,12 +533,24 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
 
          setIsAddModalOpen(false);
 
-         if (newEntriesToAdd.length > 0) {
-             setEntries(prev => [...newEntriesToAdd, ...prev]);
+         if (newEntriesToAdd.length > 0 || entriesToUpdate.length > 0) {
+             setEntries(prev => {
+                let next = [...prev];
+                // Apply Updates
+                if (entriesToUpdate.length > 0) {
+                    next = next.map(p => {
+                        const update = entriesToUpdate.find(u => u.id === p.id);
+                        return update ? update : p;
+                    });
+                }
+                // Append New
+                return [...newEntriesToAdd, ...next];
+             });
+             
              if (conflictCount > 0 || duplicateCount > 0) {
-                 showToast(`成功添加 ${newEntriesToAdd.length} 个含义 (跳过: ${conflictCount + duplicateCount})`, 'success');
+                 showToast(`成功添加 ${newEntriesToAdd.length} 个, 晋升 ${promotedCount} 个 (跳过重复/互斥: ${conflictCount + duplicateCount})`, 'success');
              } else {
-                 showToast('添加成功', 'success');
+                 showToast(`添加成功 ${newEntriesToAdd.length > 0 ? '(新增)' : '(状态更新)'}`, 'success');
              }
          } else {
              if (conflictCount > 0) {
