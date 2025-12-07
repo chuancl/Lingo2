@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
@@ -35,13 +34,32 @@ const App: React.FC = () => {
     preloadVoices(); // Preload voices for preview
     const loadData = async () => {
       await seedInitialData();
-      const [s, e, p, a, eng, dict, ank, sty, orig, interact] = await Promise.all([
+      
+      // Forced Migration for Dictionary Priorities
+      // We want to ensure ICBA is Priority 1 if user hasn't explicitly customized it to be otherwise (hard to detect, so we force update once if logic demands default behavior override)
+      // Actually, since this is a fix requested by user "Now default from Kingsoft", we enforce the constants logic.
+      const currentDicts = await dictionariesStorage.getValue();
+      const iciba = currentDicts.find(d => d.id === 'iciba');
+      
+      if (iciba && iciba.priority !== 1) {
+          // Force migration to new default priorities
+          const updatedDicts = currentDicts.map(d => {
+              if (d.id === 'iciba') return { ...d, priority: 1 };
+              if (d.id === 'youdao') return { ...d, priority: 2 };
+              return d;
+          });
+          await dictionariesStorage.setValue(updatedDicts);
+          setDictionaries(updatedDicts);
+      } else {
+           setDictionaries(currentDicts);
+      }
+
+      const [s, e, p, a, eng, ank, sty, orig, interact] = await Promise.all([
         scenariosStorage.getValue(),
         entriesStorage.getValue(),
         pageWidgetConfigStorage.getValue(),
         autoTranslateConfigStorage.getValue(),
         enginesStorage.getValue(),
-        dictionariesStorage.getValue(),
         ankiConfigStorage.getValue(),
         stylesStorage.getValue(),
         originalTextConfigStorage.getValue(),
@@ -53,7 +71,7 @@ const App: React.FC = () => {
       setPageWidgetConfig(p);
       setAutoTranslate(a);
       setEngines(eng);
-      setDictionaries(dict);
+      // setDictionaries(dict); // Handled above with migration
       setAnkiConfig(ank);
       setStyles(sty);
       setOriginalTextConfig(orig);

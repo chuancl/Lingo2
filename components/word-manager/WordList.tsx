@@ -36,6 +36,9 @@ export const WordList: React.FC<WordListProps> = ({
             const primary = group[0];
             const uniqueTranslations = Array.from(new Set(group.map(e => e.translation?.trim()).filter(Boolean)));
             const displayTranslation = uniqueTranslations.join('; ');
+            
+            // Find valid inflections from any word in the group
+            const displayInflections = group.find(e => e.inflections && e.inflections.length > 0)?.inflections;
 
             return (
               <div key={primary.id} className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all p-5 flex gap-4 group ${isGroupSelected(group) ? 'border-blue-300 bg-blue-50/10' : 'border-slate-200'}`}>
@@ -110,8 +113,8 @@ export const WordList: React.FC<WordListProps> = ({
                        {mergeConfig.exampleOrder.filter(item => item.enabled).map(item => {
                           return (
                             <React.Fragment key={item.id}>
-                               {/* Special Case: Inflections (Morphology) - Show ONCE per group using primary data */}
-                               {item.id === 'inflections' && primary.inflections && primary.inflections.length > 0 && (
+                               {/* Special Case: Inflections (Morphology) - Show ONCE per group using the best available data */}
+                               {item.id === 'inflections' && displayInflections && displayInflections.length > 0 && (
                                    <div 
                                       key={`${primary.id}-inflections`}
                                       className="bg-slate-50 p-3.5 rounded-lg border border-slate-100 relative"
@@ -119,7 +122,7 @@ export const WordList: React.FC<WordListProps> = ({
                                       <div className="absolute left-0 top-3 w-1 h-8 bg-orange-400 rounded-r"></div>
                                       <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5 pl-2">词态变化 (Morphology)</span>
                                       <div className="flex flex-wrap gap-2 pl-2">
-                                          {primary.inflections.map(inf => (
+                                          {displayInflections.map(inf => (
                                               <span key={inf} className="text-xs px-2 py-1 bg-white border border-slate-200 rounded text-slate-600 font-mono">
                                                   {inf}
                                               </span>

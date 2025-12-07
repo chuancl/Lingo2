@@ -179,16 +179,33 @@ export default defineBackground(() => {
 
                   // Extract Inflections
                   const inflections: string[] = [];
-                  // Method 1: simple.word[0].exchange
-                  if (data.simple?.word?.[0]?.exchange) {
-                      const ex = data.simple.word[0].exchange;
-                      Object.values(ex).forEach((val: any) => {
+                  
+                  // Helper to parse exchange object
+                  const parseExchange = (ex: any) => {
+                       if (!ex) return;
+                       Object.values(ex).forEach((val: any) => {
                            if (Array.isArray(val)) inflections.push(...val);
                            else if (typeof val === 'string' && val.trim()) inflections.push(val);
+                       });
+                  };
+
+                  // Method 1: simple.word[0].exchange
+                  if (data.simple?.word?.[0]?.exchange) {
+                      parseExchange(data.simple.word[0].exchange);
+                  }
+                  
+                  // Method 2: ec.word[0].exchange (often where common words like 'book' hide their inflections)
+                  if (data.ec?.word?.[0]?.exchange) {
+                      parseExchange(data.ec.word[0].exchange);
+                  }
+
+                  // Method 3: forms (sometimes used)
+                  if (data.forms && Array.isArray(data.forms)) {
+                      data.forms.forEach((f: any) => {
+                          if (f.word) inflections.push(f.word);
+                          if (f.value) inflections.push(f.value);
                       });
                   }
-                  // Method 2: ec.word[0].exchange (sometimes implicit) or basic data
-                  // Youdao is messy, but simple.exchange is usually enough.
                   
                   return {
                       phoneticUs,

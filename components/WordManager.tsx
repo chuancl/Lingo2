@@ -376,7 +376,7 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                         );
                         if (existingWant) {
                             if (!entriesToUpdate.some(u => u.id === existingWant.id)) {
-                                entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord, inflections: details.inflections });
+                                entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord, inflections: details.inflections || [] });
                                 promotedCount++;
                             }
                             continue; 
@@ -518,7 +518,7 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                  );
                  if (existingWant) {
                      if (!entriesToUpdate.some(u => u.id === existingWant.id)) {
-                         entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord, inflections: details.inflections });
+                         entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord, inflections: details.inflections || [] });
                          promotedCount++;
                      }
                      continue;
