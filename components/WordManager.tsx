@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { WordCategory, WordEntry, MergeStrategyConfig, WordTab, Scenario } from '../types';
 import { DEFAULT_MERGE_STRATEGY } from '../constants';
@@ -383,6 +382,7 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                         mixedSentence: details.mixedSentence,
                         dictionaryExample: details.dictionaryExample,
                         dictionaryExampleTranslation: details.dictionaryExampleTranslation,
+                        inflections: details.inflections, // Added
                         category: targetCategory,
                         addedAt: Date.now(),
                         scenarioId: selectedScenarioId === 'all' ? '1' : selectedScenarioId,
@@ -525,6 +525,7 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                 mixedSentence: details.mixedSentence,
                 dictionaryExample: details.dictionaryExample,
                 dictionaryExampleTranslation: details.dictionaryExampleTranslation,
+                inflections: details.inflections, // Added
                 category: targetCategory,
                 addedAt: Date.now(),
                 scenarioId: selectedScenarioId === 'all' ? '1' : selectedScenarioId,

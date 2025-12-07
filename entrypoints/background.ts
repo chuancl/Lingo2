@@ -1,8 +1,4 @@
 
-
-
-
-
 import { defineBackground } from 'wxt/sandbox';
 import { browser } from 'wxt/browser';
 import { callTencentTranslation } from '../utils/api';
@@ -168,17 +164,21 @@ export default defineBackground(() => {
                   sentences = sentences.filter(s => s.orig.length > 8 && s.orig.includes(' '));
 
                   // Extract Inflections
-                  // Often in simple.word[0].exchange or meta
                   const inflections: string[] = [];
-                  // Best effort attempt for Youdao JSONAPI variations
-                  // Sometimes in data.synonyms or simple
+                  if (data.simple?.word?.[0]?.exchange) {
+                      const ex = data.simple.word[0].exchange;
+                      Object.values(ex).forEach((val: any) => {
+                           if (Array.isArray(val)) inflections.push(...val);
+                           else if (typeof val === 'string' && val.trim()) inflections.push(val);
+                      });
+                  }
                   
                   return {
                       phoneticUs,
                       phoneticUk,
                       definitions,
                       sentences,
-                      inflections
+                      inflections: [...new Set(inflections)]
                   };
               }
 
@@ -206,7 +206,7 @@ export default defineBackground(() => {
                   
                   const example = entry.meanings?.[0]?.definitions?.find((d: any) => d.example)?.example || '';
                   const sentences = example ? [{ orig: example, trans: '' }] : [];
-                  const inflections: string[] = []; // FreeDict API doesn't provide easy inflection list
+                  const inflections: string[] = []; 
 
                   return {
                       phoneticUs: usPhonetic,
@@ -230,35 +230,53 @@ export default defineBackground(() => {
   };
 
   // Improved Sentence Assigner: Tries to find a sentence that matches the definition keywords
+  // AND avoids reusing sentences if possible.
   const smartAssignSentence = (
       sentences: { orig: string; trans: string }[], 
       definitionKeywords: string[],
-      idx: number
+      usedIndices: Set<number>
   ) => {
       if (!sentences || sentences.length === 0) return { orig: '', trans: '' };
       
       // 1. Try to find a sentence that contains one of the definition keywords in its translation
-      for (const sent of sentences) {
+      for (let i = 0; i < sentences.length; i++) {
+          if (usedIndices.has(i)) continue; // Skip used sentences
+          
+          const sent = sentences[i];
           if (!sent.trans) continue;
+
           for (const keyword of definitionKeywords) {
               // Only check keywords longer than 1 char to avoid noise, unless definition itself is 1 char
               if (keyword.length > 1 || definitionKeywords.length === 1) {
                   if (sent.trans.includes(keyword)) {
+                      usedIndices.add(i);
                       return sent;
                   }
               }
           }
       }
 
-      // 2. Fallback: Cyclic assignment
-      return sentences[idx % sentences.length];
+      // 2. Fallback: Find first UNUSED sentence (to avoid duplication across meanings)
+      for (let i = 0; i < sentences.length; i++) {
+          if (!usedIndices.has(i)) {
+              usedIndices.add(i);
+              return sentences[i];
+          }
+      }
+
+      // 3. Ultimate Fallback: Reuse if we ran out of unique sentences
+      // Return the first one but don't mark as "used" (since it's already used or we don't care anymore)
+      return sentences[0];
   };
 
   // Helper to extract keywords from meaning array
   const extractKeywords = (means: string[]) => {
-      // means is ["书籍", "本"]
-      // Split by common separators just in case
-      return means.flatMap(m => m.split(/[,，;；]/)).map(s => s.trim()).filter(Boolean);
+      // Split by common separators, remove POS prefixes (e.g. "n. "), remove brackets
+      return means.flatMap(m => m.split(/[,，;；]/))
+          .map(s => s.replace(/^[a-z]+\.\s*/, '')) // Remove start "n. "
+          .map(s => s.replace(/[（(].*?[)）]/g, '')) // Remove (brackets)
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
   };
 
   // Message Handler for API Requests
@@ -312,7 +330,7 @@ export default defineBackground(() => {
               return;
           }
 
-          // 1. Fetch Real Dictionary Data First (Always, to get definitions and sentences)
+          // 1. Fetch Real Dictionary Data First
           const dictData = await fetchEnglishDictionaryData(text);
 
           // 2. Prepare Meanings
@@ -326,29 +344,26 @@ export default defineBackground(() => {
           }[] = [];
 
           if (dictData && dictData.definitions.length > 0) {
-              // Map EACH definition to a potential meaning entry
-              // This ensures "book" -> "n. 书籍", "v. 预订" are separate entries
               const validSentences = dictData.sentences;
-              
+              const usedIndices = new Set<number>();
+
               meanings = dictData.definitions.map((def, idx) => {
-                  // Format translation as "n. definition"
                   const formattedTranslation = def.part ? `${def.part} ${def.means.join('; ')}` : def.means.join('; ');
                   
                   // Use Smart Assignment Logic
                   const keywords = extractKeywords(def.means);
-                  const sent = smartAssignSentence(validSentences, keywords, idx);
+                  const sent = smartAssignSentence(validSentences, keywords, usedIndices);
 
                   return {
                       translation: formattedTranslation.trim(),
                       partOfSpeech: def.part,
-                      contextSentence: '', // Filled by caller if needed later or empty
+                      contextSentence: '',
                       mixedSentence: '',
                       dictionaryExample: sent.orig,
                       dictionaryExampleTranslation: sent.trans
                   };
               });
           } else if (engine.id === 'tencent') {
-              // Fallback: Translate using Tencent if no dict data found
               const res = await callTencentTranslation(engine, text, 'zh');
               const trans = res.Response?.TargetText || "API Error";
               meanings.push({

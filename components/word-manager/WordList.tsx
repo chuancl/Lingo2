@@ -1,7 +1,4 @@
 
-
-
-
 import React from 'react';
 import { WordEntry, WordCategory, MergeStrategyConfig, WordTab } from '../../types';
 import { PlayCircle, MapPin, ExternalLink, Filter } from 'lucide-react';
