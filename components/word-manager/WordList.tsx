@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { WordEntry, WordCategory, MergeStrategyConfig, WordTab } from '../../types';
 import { PlayCircle, MapPin, ExternalLink, Filter } from 'lucide-react';
@@ -36,6 +35,8 @@ export const WordList: React.FC<WordListProps> = ({
           {groupedEntries.map(group => {
             const primary = group[0];
             const uniqueTranslations = Array.from(new Set(group.map(e => e.translation?.trim()).filter(Boolean)));
+            // Join translations for display if needed, but primary display uses uniqueTranslations
+            const displayTranslation = uniqueTranslations.join('; ');
 
             return (
               <div key={primary.id} className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all p-5 flex gap-4 group ${isGroupSelected(group) ? 'border-blue-300 bg-blue-50/10' : 'border-slate-200'}`}>
@@ -49,37 +50,48 @@ export const WordList: React.FC<WordListProps> = ({
                 </div>
 
                 <div className="flex-1 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
-                      <div className="flex items-baseline gap-3">
-                        <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{primary.text}</h3>
-                        {showConfig.showPhonetic && (primary.phoneticUs || primary.phoneticUk) && (
-                          <div className="flex items-center text-sm text-slate-500 space-x-3 font-mono bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-                             {primary.phoneticUs && (
-                                <span 
-                                    className="flex items-center cursor-pointer hover:text-blue-600 transition select-none mr-2" 
-                                    title="点击播放美式发音"
-                                    onClick={(e) => { e.stopPropagation(); playTextToSpeech(primary.text, 'US', ttsSpeed); }}
-                                >
-                                    <span className="text-[10px] mr-1 text-slate-400 font-sans">US</span> 
-                                    {primary.phoneticUs} 
-                                    <PlayCircle className="w-3.5 h-3.5 ml-1 opacity-50 group-hover:opacity-100"/>
-                                </span>
-                             )}
-                             {primary.phoneticUk && (
-                                <span 
-                                    className="flex items-center cursor-pointer hover:text-blue-600 transition select-none" 
-                                    title="点击播放英式发音"
-                                    onClick={(e) => { e.stopPropagation(); playTextToSpeech(primary.text, 'UK', ttsSpeed); }}
-                                >
-                                    <span className="text-[10px] mr-1 text-slate-400 font-sans">UK</span> 
-                                    {primary.phoneticUk} 
-                                    <PlayCircle className="w-3.5 h-3.5 ml-1 opacity-50 group-hover:opacity-100"/>
-                                </span>
-                             )}
-                          </div>
-                        )}
-                        {/* Show Category badge if in 'All Words' tab */}
-                        {isAllWordsTab && (
+                    {/* Header Row: Text -> Phonetic -> Meaning -> Badge (Right) */}
+                    <div className="flex items-center gap-3 relative flex-wrap pr-20"> {/* pr-20 leaves room for badge on small screens if absolute, but we use flex ml-auto now */}
+                      <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{primary.text}</h3>
+                      
+                      {showConfig.showPhonetic && (primary.phoneticUs || primary.phoneticUk) && (
+                        <div className="flex items-center text-sm text-slate-500 space-x-3 font-mono bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                           {primary.phoneticUs && (
+                              <span 
+                                  className="flex items-center cursor-pointer hover:text-blue-600 transition select-none mr-2" 
+                                  title="点击播放美式发音"
+                                  onClick={(e) => { e.stopPropagation(); playTextToSpeech(primary.text, 'US', ttsSpeed); }}
+                              >
+                                  <span className="text-[10px] mr-1 text-slate-400 font-sans">US</span> 
+                                  {primary.phoneticUs} 
+                                  <PlayCircle className="w-3.5 h-3.5 ml-1 opacity-50 group-hover:opacity-100"/>
+                              </span>
+                           )}
+                           {primary.phoneticUk && (
+                              <span 
+                                  className="flex items-center cursor-pointer hover:text-blue-600 transition select-none" 
+                                  title="点击播放英式发音"
+                                  onClick={(e) => { e.stopPropagation(); playTextToSpeech(primary.text, 'UK', ttsSpeed); }}
+                              >
+                                  <span className="text-[10px] mr-1 text-slate-400 font-sans">UK</span> 
+                                  {primary.phoneticUk} 
+                                  <PlayCircle className="w-3.5 h-3.5 ml-1 opacity-50 group-hover:opacity-100"/>
+                              </span>
+                           )}
+                        </div>
+                      )}
+                      
+                      {showConfig.showMeaning && displayTranslation && (
+                        <div className="text-slate-700 font-medium px-3 py-1 bg-amber-50 text-amber-900 rounded-lg border border-amber-100 text-sm">
+                          {displayTranslation}
+                          {group.length > 1 && mergeConfig.strategy === 'by_word' && (
+                             <span className="ml-2 text-xs text-amber-700/60 font-normal">({group.length})</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Badge always on the far right */}
+                      <div className="ml-auto absolute right-0 top-1 sm:static sm:top-auto sm:right-auto">
                            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
                              primary.category === WordCategory.KnownWord ? 'bg-green-50 text-green-700 border-green-200' :
                              primary.category === WordCategory.WantToLearnWord ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -87,17 +99,7 @@ export const WordList: React.FC<WordListProps> = ({
                            }`}>
                              {primary.category}
                            </span>
-                        )}
                       </div>
-                      
-                      {showConfig.showMeaning && uniqueTranslations.length > 0 && (
-                        <div className="text-slate-700 font-medium px-3 py-1 bg-amber-50 text-amber-900 rounded-lg border border-amber-100 text-sm max-w-full sm:max-w-[50%] text-right">
-                          {uniqueTranslations.join('; ')}
-                          {group.length > 1 && mergeConfig.strategy === 'by_word' && (
-                             <span className="ml-2 text-xs text-amber-700/60 font-normal">({group.length} contexts)</span>
-                          )}
-                        </div>
-                      )}
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">

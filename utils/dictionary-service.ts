@@ -8,11 +8,12 @@ interface DictionaryResult {
   phoneticUk: string;
   meanings: {
     translation: string;
+    partOfSpeech?: string; // Added to help with better display
     definition?: string;
     contextSentence: string;
     mixedSentence: string;
     dictionaryExample: string;
-    dictionaryExampleTranslation?: string; // Added field
+    dictionaryExampleTranslation?: string; 
   }[];
 }
 
@@ -60,7 +61,6 @@ export const fetchWordDetails = async (
 ): Promise<Partial<WordEntry>[]> => {
   
   // 1. Send message to background to handle the actual API call (to avoid CORS)
-  // The background script will route this to the appropriate API handler (AI or Standard)
   const response = await browser.runtime.sendMessage({
     action: 'LOOKUP_WORD',
     engine: engine,
@@ -83,17 +83,22 @@ export const fetchWordDetails = async (
 
   // If user provided a specific translation, filter to find the closest match
   if (preferredTranslation && preferredTranslation.trim()) {
-    // Find best match
+    // Find best match based on similarity
     const sorted = [...result.meanings].sort((a, b) => {
         const scoreA = similarity(a.translation, preferredTranslation);
         const scoreB = similarity(b.translation, preferredTranslation);
         return scoreB - scoreA;
     });
     
-    // If we have a match, take the top one. 
-    // Ideally, if the API is good, the top one is the intended meaning.
+    // Take the top match if it exists
     if (sorted.length > 0) {
         selectedMeanings = [sorted[0]];
+    }
+  } else {
+    // If no preference, we use ALL meanings returned by the dictionary.
+    // However, if the result has no meanings (fallback), we might get one empty one.
+    if (selectedMeanings.length === 0) {
+       // Should allow empty to fail gracefully or handled upstream
     }
   }
 

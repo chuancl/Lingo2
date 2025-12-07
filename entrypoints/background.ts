@@ -1,10 +1,16 @@
 
-
 import { defineBackground } from 'wxt/sandbox';
 import { browser } from 'wxt/browser';
 import { callTencentTranslation } from '../utils/api';
 import { dictionariesStorage } from '../utils/storage';
 import { DictionaryEngine } from '../types';
+
+interface DictData {
+    phoneticUs: string;
+    phoneticUk: string;
+    definitions: { part: string; means: string[] }[];
+    sentences: { orig: string; trans: string }[];
+}
 
 export default defineBackground(() => {
   // Check if we need to seed data on install
@@ -32,7 +38,7 @@ export default defineBackground(() => {
   });
 
   // --- Helper: Fetch Dictionary Data with Failover ---
-  const fetchEnglishDictionaryData = async (word: string) => {
+  const fetchEnglishDictionaryData = async (word: string): Promise<DictData | null> => {
       const allDicts = await dictionariesStorage.getValue();
       const enabledDicts = allDicts.filter(d => d.isEnabled).sort((a, b) => a.priority - b.priority);
 
@@ -50,21 +56,21 @@ export default defineBackground(() => {
 
                   const symbol = data.symbols[0];
                   
-                  // Extract Example
-                  let example = "";
-                  let exampleTranslation = "";
-                  // Try to find a good example from 'sent' (sentences)
-                  if (data.sent && data.sent.length > 0) {
-                      const ex = data.sent[0];
-                      example = ex.orig ? ex.orig.trim() : "";
-                      exampleTranslation = ex.trans ? ex.trans.trim() : "";
-                  }
+                  const definitions = (symbol.parts || []).map((p: any) => ({
+                      part: p.part || '',
+                      means: p.means || [] // Array of strings
+                  }));
+
+                  const sentences = (data.sent || []).map((s: any) => ({
+                      orig: s.orig ? s.orig.trim() : "",
+                      trans: s.trans ? s.trans.trim() : ""
+                  }));
 
                   return {
                       phoneticUs: symbol.ph_am ? `/${symbol.ph_am}/` : '',
                       phoneticUk: symbol.ph_en ? `/${symbol.ph_en}/` : '',
-                      example: example,
-                      exampleTranslation: exampleTranslation
+                      definitions,
+                      sentences
                   };
               }
 
@@ -78,39 +84,70 @@ export default defineBackground(() => {
                   
                   let phoneticUs = "";
                   let phoneticUk = "";
-                  let example = "";
-                  let exampleTranslation = "";
-
-                  // Youdao structure varies (ec, simple, etc)
+                  
+                  // Phonetics from simple or ec
                   if (data.simple && data.simple.word && data.simple.word.length > 0) {
                       const w = data.simple.word[0];
                       if(w['usphone']) phoneticUs = `/${w['usphone']}/`;
                       if(w['ukphone']) phoneticUk = `/${w['ukphone']}/`;
                   }
-                  
-                  // Fallback to 'ec' part if simple missing
                   if (!phoneticUs && data.ec && data.ec.word && data.ec.word.length > 0) {
                       const w = data.ec.word[0];
                       if(w['usphone']) phoneticUs = `/${w['usphone']}/`;
                       if(w['ukphone']) phoneticUk = `/${w['ukphone']}/`;
                   }
 
-                  // Find examples in 'blng_sents_part' (bilingual sentences) or 'auth_sents_part'
-                  if (data.blng_sents_part && data.blng_sents_part['sentence-pair']) {
-                      const pairs = data.blng_sents_part['sentence-pair'];
-                      if (pairs.length > 0) {
-                          example = pairs[0].sentence || "";
-                          exampleTranslation = pairs[0]['sentence-translation'] || "";
-                      }
+                  // Definitions
+                  const definitions: { part: string; means: string[] }[] = [];
+                  
+                  // Try extracting from 'ec' (most common)
+                  if (data.ec && data.ec.word && data.ec.word.length > 0 && data.ec.word[0].trs) {
+                      data.ec.word[0].trs.forEach((trItem: any) => {
+                          // Try to find pos and tran
+                          // Youdao struct can be simple object or nested
+                          // Commonly: { pos: "n.", tran: "书籍" }
+                          if (trItem.pos && trItem.tran) {
+                              definitions.push({
+                                  part: trItem.pos,
+                                  means: [trItem.tran]
+                              });
+                          } else if (trItem.tr && trItem.tr[0] && trItem.tr[0].l && trItem.tr[0].l.i) {
+                               // Fallback deeper nested structure sometimes seen
+                               const raw = trItem.tr[0].l.i[0];
+                               // Raw might be "n. 书籍"
+                               // Simple parsing
+                               const parts = raw.split('.');
+                               if (parts.length > 1) {
+                                   definitions.push({
+                                       part: parts[0] + '.',
+                                       means: [parts.slice(1).join('.').trim()]
+                                   });
+                               } else {
+                                   definitions.push({ part: '', means: [raw] });
+                               }
+                          }
+                      });
                   }
 
-                  if (phoneticUs || phoneticUk || example) {
-                      return { phoneticUs, phoneticUk, example, exampleTranslation };
+                  // Sentences
+                  const sentences: { orig: string; trans: string }[] = [];
+                  if (data.blng_sents_part && data.blng_sents_part['sentence-pair']) {
+                      data.blng_sents_part['sentence-pair'].forEach((pair: any) => {
+                          if (pair.sentence && pair['sentence-translation']) {
+                              sentences.push({
+                                  orig: pair.sentence,
+                                  trans: pair['sentence-translation']
+                              });
+                          }
+                      });
                   }
-                  // If nothing found in Youdao, continue
+
+                  if (phoneticUs || phoneticUk || definitions.length > 0) {
+                      return { phoneticUs, phoneticUk, definitions, sentences };
+                  }
               }
 
-              // --- 3. Free Dictionary API (Google) - Blocked in China ---
+              // --- 3. Free Dictionary API (Google) ---
               if (dict.id === 'free-dict') {
                   const res = await fetch(`${dict.endpoint}${word}`);
                   if (!res.ok) continue; 
@@ -118,25 +155,34 @@ export default defineBackground(() => {
                   if (!Array.isArray(data) || data.length === 0) continue;
                   
                   const entry = data[0];
-                  // Robust phonetic extraction
                   const usPhonetic = entry.phonetics?.find((p: any) => p.audio?.includes('-us.mp3') || p.text)?.text || entry.phonetic || '';
                   const ukPhonetic = entry.phonetics?.find((p: any) => p.audio?.includes('-uk.mp3'))?.text || '';
+
+                  const definitions: { part: string; means: string[] }[] = [];
+                  if (entry.meanings) {
+                      entry.meanings.forEach((m: any) => {
+                          const means = m.definitions.map((d: any) => d.definition);
+                          definitions.push({
+                              part: m.partOfSpeech || '',
+                              means: means
+                          });
+                      });
+                  }
+                  
+                  const example = entry.meanings?.[0]?.definitions?.find((d: any) => d.example)?.example || '';
+                  const sentences = example ? [{ orig: example, trans: '' }] : [];
 
                   return {
                       phoneticUs: usPhonetic,
                       phoneticUk: ukPhonetic,
-                      example: entry.meanings?.[0]?.definitions?.find((d: any) => d.example)?.example || '',
-                      exampleTranslation: '' // FreeDict is usually mono-lingual
+                      definitions,
+                      sentences
                   };
               } 
               
               // --- 4. Wiktionary (Fallback) ---
               if (dict.id === 'wiktionary') {
-                   // Fallback to Wiktionary (Simple API call, robust parsing omitted for brevity)
-                   // Just checking existence for now as a last resort
-                   const res = await fetch(`${dict.endpoint}${word}`);
-                   if (!res.ok) continue;
-                   console.log(`Fallback to Wiktionary for ${word} (Parsing not fully implemented)`);
+                   // Fallback to Wiktionary (Skipped for brevity, complex parsing)
                    continue; 
               }
           } catch (e) {
@@ -146,14 +192,12 @@ export default defineBackground(() => {
       return null;
   };
 
-  // Message Handler for API Requests (Bypassing CORS)
+  // Message Handler for API Requests
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'TRANSLATE_TEXT') {
-      // Use async IIFE to handle the promise and sendResponse
       (async () => {
         try {
-          console.log('ContextLingo Background: Translating...', { text: message.text?.substring(0, 20) });
-          // We currently only support Tencent in the demo logic, but this can be expanded
+          // Translate logic
           if (message.engine.id === 'tencent') {
              const result = await callTencentTranslation(message.engine, message.text, message.target);
              sendResponse({ success: true, data: result });
@@ -167,11 +211,10 @@ export default defineBackground(() => {
           sendResponse({ success: false, error: error.message || String(error) });
         }
       })();
-      return true; // Return true to indicate we wish to send a response asynchronously
+      return true; 
     }
 
     if (message.action === 'LOOKUP_WORD') {
-      // Handle Dictionary Lookup logic (called from WordManager)
       (async () => {
         try {
           console.log('ContextLingo Background: Looking up word...', message.text);
@@ -191,48 +234,66 @@ export default defineBackground(() => {
                         mixedSentence: `这是一个关于 ${text} (示例释义1) 的句子。`,
                         dictionaryExample: `Example usage of ${text}.`,
                         dictionaryExampleTranslation: `关于 ${text} 的例句用法。`
+                    },
+                    // Add a second meaning for testing multiselect
+                    {
+                        translation: "示例释义2 (Mock)",
+                        contextSentence: `Another context for ${text}.`,
+                        mixedSentence: `另一个 ${text} (示例释义2) 的句子。`,
+                        dictionaryExample: `Second example of ${text}.`,
+                        dictionaryExampleTranslation: `关于 ${text} 的第二个例句。`
                     }
                 ]
               };
-              // Simulate delay
-              await new Promise(r => setTimeout(r, 800));
+              await new Promise(r => setTimeout(r, 600));
               sendResponse({ success: true, data: mockResult });
               return;
           }
 
           if (engine.id === 'tencent') {
-             // 1. Fetch Real Dictionary Data First (Phonetics, Examples)
+             // 1. Fetch Real Dictionary Data First
              const dictData = await fetchEnglishDictionaryData(text);
 
-             // 2. Fetch Translation
-             const res = await callTencentTranslation(engine, text, 'zh');
-             const trans = res.Response?.TargetText || preferredTranslation || "API Error";
-             
-             // 3. Merge
-             // Use US phonetic as fallback for both if one missing, or empty string
-             const pUs = dictData?.phoneticUs || '';
-             const pUk = dictData?.phoneticUk || pUs; // Fallback to US if UK missing
+             // 2. Prepare Meanings
+             let meanings = [];
+
+             if (dictData && dictData.definitions.length > 0) {
+                 // Use dictionary definitions
+                 // We attach the first example to all definitions for now, 
+                 // as we can't easily map sentences to specific definitions without NLP.
+                 const firstSent = dictData.sentences[0] || { orig: '', trans: '' };
+                 
+                 meanings = dictData.definitions.map(def => ({
+                     translation: `${def.part} ${def.means.join('; ')}`.trim(),
+                     partOfSpeech: def.part,
+                     contextSentence: '',
+                     mixedSentence: '',
+                     dictionaryExample: firstSent.orig,
+                     dictionaryExampleTranslation: firstSent.trans
+                 }));
+             } else {
+                 // Fallback: Translate using Tencent if no dict data
+                 const res = await callTencentTranslation(engine, text, 'zh');
+                 const trans = res.Response?.TargetText || "API Error";
+                 meanings.push({
+                     translation: trans,
+                     contextSentence: '',
+                     mixedSentence: '',
+                     dictionaryExample: '',
+                     dictionaryExampleTranslation: ''
+                 });
+             }
 
              const result = {
                  text: text,
-                 phoneticUs: pUs,
-                 phoneticUk: pUk,
-                 meanings: [
-                     {
-                         translation: trans,
-                         contextSentence: '', // Manual add has no context source from page
-                         contextSentenceTranslation: '',
-                         mixedSentence: '', // Manual add has no mixed sentence from page
-                         dictionaryExample: dictData?.example || '',
-                         dictionaryExampleTranslation: dictData?.exampleTranslation || ''
-                     }
-                 ]
+                 phoneticUs: dictData?.phoneticUs || '',
+                 phoneticUk: dictData?.phoneticUk || '',
+                 meanings: meanings
              };
              sendResponse({ success: true, data: result });
+
           } else {
-             // For AI Engines (Gemini, OpenAI), you would construct the prompt here 
-             // and call the LLM API to get the JSON structure.
-             // For now, fall back to simple error or mock implementation if not integrated.
+             // AI Engines (Placeholder)
              throw new Error(`Engine ${engine.name} does not support dictionary lookup yet.`);
           }
 
