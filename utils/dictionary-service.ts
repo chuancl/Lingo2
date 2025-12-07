@@ -12,6 +12,7 @@ interface DictionaryResult {
     contextSentence: string;
     mixedSentence: string;
     dictionaryExample: string;
+    dictionaryExampleTranslation?: string; // Added field
   }[];
 }
 
@@ -107,6 +108,7 @@ export const fetchWordDetails = async (
     contextSentence: m.contextSentence,
     mixedSentence: m.mixedSentence,
     dictionaryExample: m.dictionaryExample,
+    dictionaryExampleTranslation: m.dictionaryExampleTranslation,
     addedAt: timestamp + idx // Offset slightly to ensure unique sort order
   }));
 };
