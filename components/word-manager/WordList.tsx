@@ -35,6 +35,8 @@ export const WordList: React.FC<WordListProps> = ({
         <div className="space-y-4">
           {groupedEntries.map(group => {
             const primary = group[0];
+            const uniqueTranslations = Array.from(new Set(group.map(e => e.translation?.trim()).filter(Boolean)));
+
             return (
               <div key={primary.id} className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all p-5 flex gap-4 group ${isGroupSelected(group) ? 'border-blue-300 bg-blue-50/10' : 'border-slate-200'}`}>
                 <div className="pt-1.5">
@@ -87,9 +89,10 @@ export const WordList: React.FC<WordListProps> = ({
                            </span>
                         )}
                       </div>
-                      {showConfig.showMeaning && primary.translation && (
-                        <div className="text-slate-700 font-medium px-3 py-1 bg-amber-50 text-amber-900 rounded-lg border border-amber-100 text-sm">
-                          {primary.translation}
+                      
+                      {showConfig.showMeaning && uniqueTranslations.length > 0 && (
+                        <div className="text-slate-700 font-medium px-3 py-1 bg-amber-50 text-amber-900 rounded-lg border border-amber-100 text-sm max-w-full sm:max-w-[50%] text-right">
+                          {uniqueTranslations.join('; ')}
                           {group.length > 1 && mergeConfig.strategy === 'by_word' && (
                              <span className="ml-2 text-xs text-amber-700/60 font-normal">({group.length} contexts)</span>
                           )}
