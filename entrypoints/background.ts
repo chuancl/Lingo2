@@ -237,8 +237,6 @@ export default defineBackground(() => {
   ) => {
       if (!sentences || sentences.length === 0) return { orig: '', trans: '' };
       
-      const STOP_WORDS = new Set(['的', '了', '是', '在', '和', '与', '或', '一', '个']);
-
       // 1. Try to find a sentence that contains one of the definition keywords in its translation
       for (let i = 0; i < sentences.length; i++) {
           if (usedIndices.has(i)) continue; // Skip used sentences
@@ -247,32 +245,20 @@ export default defineBackground(() => {
           if (!sent.trans) continue;
 
           for (const keyword of definitionKeywords) {
-              // Full keyword match (e.g. "预订")
+              // Exact keyword match (e.g. "预订" in "我预订了机票")
+              // We do NOT use fuzzy single-char matching anymore to avoid false positives (e.g. "书" matching "书写" or "证书")
               if (keyword.length > 0 && sent.trans.includes(keyword)) {
                   usedIndices.add(i);
                   return sent;
               }
-
-              // Partial Character Match (for cases like "预订" matching "订了票")
-              // Only apply if keyword has length >= 2 to avoid single char noise (like "书" matching "书写")
-              if (keyword.length >= 2) {
-                  // Split keyword into chars
-                  const chars = keyword.split('');
-                  // If ANY significant char is found in sentence
-                  for (const char of chars) {
-                      if (!STOP_WORDS.has(char) && sent.trans.includes(char)) {
-                          usedIndices.add(i);
-                          return sent;
-                      }
-                  }
-              }
           }
       }
 
-      // 2. If no match found, DO NOT pick a random unused one if we have multiple meanings.
-      // Returning an empty/dummy object effectively means "no example available for this specific meaning",
-      // which is better than showing a wrong example.
-      // However, if it's the VERY FIRST meaning (empty usedIndices), we might want to return *something*.
+      // 2. Strict Fallback
+      // ONLY if this is the very first definition (usedIndices is empty), and we found no match,
+      // we return the first sentence as a generic example.
+      // If usedIndices is NOT empty (meaning previous definitions already took some sentences),
+      // we DO NOT return a fallback. This prevents "Book" sentences appearing for "Reserve".
       if (usedIndices.size === 0 && sentences.length > 0) {
            usedIndices.add(0);
            return sentences[0];

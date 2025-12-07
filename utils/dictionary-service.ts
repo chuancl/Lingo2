@@ -1,9 +1,5 @@
 
 
-
-
-
-
 import { TranslationEngine, WordEntry, WordCategory } from "../types";
 import { browser } from "wxt/browser";
 
@@ -113,7 +109,7 @@ export const fetchWordDetails = async (
     text: result.text, // Use returned casing
     phoneticUs: result.phoneticUs,
     phoneticUk: result.phoneticUk,
-    inflections: result.inflections, // Pass inflections
+    inflections: result.inflections || [], // Pass inflections, ensure array
     translation: m.translation,
     contextSentence: m.contextSentence,
     mixedSentence: m.mixedSentence,

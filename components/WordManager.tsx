@@ -48,25 +48,25 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
     showMeaning: true,
   });
   
-  // Initialize with DEFAULT to ensure new fields are present, will be overwritten by storage if available
+  // Initialize with DEFAULT to ensure new fields are present
   const [mergeConfig, setMergeConfig] = useState<MergeStrategyConfig>(DEFAULT_MERGE_STRATEGY);
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
 
-  // Load saved config from local storage manually if needed, or rely on the props passed down if we were using a parent config
-  // Here we use local state for MergeConfig as it might be specific to this view for now, or we could persist it.
-  // For this fix, we ensure 'inflections' exists in the order.
+  // Load saved config from local storage
   useEffect(() => {
      const savedConfigStr = localStorage.getItem('context-lingo-merge-config');
      if (savedConfigStr) {
          try {
              const saved = JSON.parse(savedConfigStr);
              // Migration: Ensure 'inflections' is in exampleOrder
-             if (!saved.exampleOrder.some((item: any) => item.id === 'inflections')) {
+             if (saved.exampleOrder && !saved.exampleOrder.some((item: any) => item.id === 'inflections')) {
                  saved.exampleOrder.push({ id: 'inflections', label: '词态变化 (Morphology)', enabled: true });
+                 localStorage.setItem('context-lingo-merge-config', JSON.stringify(saved)); // Update storage immediately
              }
              setMergeConfig(saved);
          } catch (e) {
              console.error("Failed to load merge config", e);
+             setMergeConfig(DEFAULT_MERGE_STRATEGY);
          }
      }
   }, []);
@@ -362,7 +362,7 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                         );
                         if (existingWant) {
                             if (!entriesToUpdate.some(u => u.id === existingWant.id)) {
-                                entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord });
+                                entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord, inflections: details.inflections });
                                 promotedCount++;
                             }
                             continue; 
@@ -408,7 +408,7 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                         mixedSentence: details.mixedSentence,
                         dictionaryExample: details.dictionaryExample,
                         dictionaryExampleTranslation: details.dictionaryExampleTranslation,
-                        inflections: details.inflections, 
+                        inflections: details.inflections || [], 
                         category: targetCategory,
                         addedAt: Date.now(),
                         scenarioId: selectedScenarioId === 'all' ? '1' : selectedScenarioId,
@@ -504,7 +504,7 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                  );
                  if (existingWant) {
                      if (!entriesToUpdate.some(u => u.id === existingWant.id)) {
-                         entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord });
+                         entriesToUpdate.push({ ...existingWant, category: WordCategory.LearningWord, inflections: details.inflections });
                          promotedCount++;
                      }
                      continue;
@@ -551,7 +551,7 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
                 mixedSentence: details.mixedSentence,
                 dictionaryExample: details.dictionaryExample,
                 dictionaryExampleTranslation: details.dictionaryExampleTranslation,
-                inflections: details.inflections, 
+                inflections: details.inflections || [], 
                 category: targetCategory,
                 addedAt: Date.now(),
                 scenarioId: selectedScenarioId === 'all' ? '1' : selectedScenarioId,
