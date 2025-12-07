@@ -110,11 +110,28 @@ export const WordList: React.FC<WordListProps> = ({
                        {mergeConfig.exampleOrder.filter(item => item.enabled).map(item => {
                           return (
                             <React.Fragment key={item.id}>
+                               {/* Special Case: Inflections (Morphology) - Show ONCE per group using primary data */}
+                               {item.id === 'inflections' && primary.inflections && primary.inflections.length > 0 && (
+                                   <div 
+                                      key={`${primary.id}-inflections`}
+                                      className="bg-slate-50 p-3.5 rounded-lg border border-slate-100 relative"
+                                   >
+                                      <div className="absolute left-0 top-3 w-1 h-8 bg-orange-400 rounded-r"></div>
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5 pl-2">词态变化 (Morphology)</span>
+                                      <div className="flex flex-wrap gap-2 pl-2">
+                                          {primary.inflections.map(inf => (
+                                              <span key={inf} className="text-xs px-2 py-1 bg-white border border-slate-200 rounded text-slate-600 font-mono">
+                                                  {inf}
+                                              </span>
+                                          ))}
+                                      </div>
+                                   </div>
+                               )}
+
                                {group.map((entry, idx) => {
-                                  // For non-inflections (sentences), apply "showMultiExamples" restriction
-                                  if (item.id !== 'inflections' && !mergeConfig.showMultiExamples && idx > 0) return null;
-                                  // For inflections, we only show once per group
-                                  if (item.id === 'inflections' && idx > 0) return null;
+                                  // For normal sentences, apply multi-example limits
+                                  if (item.id === 'inflections') return null; // Already handled above
+                                  if (!mergeConfig.showMultiExamples && idx > 0) return null;
 
                                   if (item.id === 'context' && entry.contextSentence) {
                                     return (
@@ -175,25 +192,6 @@ export const WordList: React.FC<WordListProps> = ({
                                           )}
                                         </div>
                                      );
-                                  }
-                                  // New Inflections Block
-                                  if (item.id === 'inflections' && entry.inflections && entry.inflections.length > 0) {
-                                      return (
-                                          <div 
-                                              key={`${entry.id}-inflections`}
-                                              className="bg-slate-50 p-3.5 rounded-lg border border-slate-100 relative"
-                                          >
-                                              <div className="absolute left-0 top-3 w-1 h-8 bg-orange-400 rounded-r"></div>
-                                              <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5 pl-2">词态变化 (Morphology)</span>
-                                              <div className="flex flex-wrap gap-2 pl-2">
-                                                  {entry.inflections.map(inf => (
-                                                      <span key={inf} className="text-xs px-2 py-1 bg-white border border-slate-200 rounded text-slate-600 font-mono">
-                                                          {inf}
-                                                      </span>
-                                                  ))}
-                                              </div>
-                                          </div>
-                                      );
                                   }
 
                                   return null;

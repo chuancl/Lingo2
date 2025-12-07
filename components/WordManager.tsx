@@ -52,22 +52,36 @@ export const WordManager: React.FC<WordManagerProps> = ({ scenarios, entries, se
   const [mergeConfig, setMergeConfig] = useState<MergeStrategyConfig>(DEFAULT_MERGE_STRATEGY);
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
 
-  // Load saved config from local storage
+  // Load saved config from local storage AND force migration if needed
   useEffect(() => {
      const savedConfigStr = localStorage.getItem('context-lingo-merge-config');
      if (savedConfigStr) {
          try {
              const saved = JSON.parse(savedConfigStr);
+             let needsUpdate = false;
+
              // Migration: Ensure 'inflections' is in exampleOrder
              if (saved.exampleOrder && !saved.exampleOrder.some((item: any) => item.id === 'inflections')) {
                  saved.exampleOrder.push({ id: 'inflections', label: '词态变化 (Morphology)', enabled: true });
-                 localStorage.setItem('context-lingo-merge-config', JSON.stringify(saved)); // Update storage immediately
+                 needsUpdate = true;
+             }
+             
+             // Migration: Ensure other toggles exist
+             if (typeof saved.showExampleTranslation === 'undefined') { saved.showExampleTranslation = true; needsUpdate = true; }
+             if (typeof saved.showContextTranslation === 'undefined') { saved.showContextTranslation = true; needsUpdate = true; }
+
+             if (needsUpdate) {
+                 localStorage.setItem('context-lingo-merge-config', JSON.stringify(saved));
              }
              setMergeConfig(saved);
          } catch (e) {
              console.error("Failed to load merge config", e);
              setMergeConfig(DEFAULT_MERGE_STRATEGY);
          }
+     } else {
+         // First time load or cleared storage
+         setMergeConfig(DEFAULT_MERGE_STRATEGY);
+         localStorage.setItem('context-lingo-merge-config', JSON.stringify(DEFAULT_MERGE_STRATEGY));
      }
   }, []);
 

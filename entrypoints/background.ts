@@ -64,10 +64,18 @@ export default defineBackground(() => {
                   }));
 
                   // Extract sentences and FILTER out bad ones (short or single word)
-                  const sentences = (data.sent || []).map((s: any) => ({
+                  let sentences = (data.sent || []).map((s: any) => ({
                       orig: s.orig ? s.orig.trim() : "",
                       trans: s.trans ? s.trans.trim() : ""
                   })).filter((s: any) => s.orig.length > 8 && s.orig.includes(' ') && s.trans); 
+                  
+                  // Deduplicate sentences based on original text
+                  const seenSent = new Set();
+                  sentences = sentences.filter((s: any) => {
+                      if (seenSent.has(s.orig)) return false;
+                      seenSent.add(s.orig);
+                      return true;
+                  });
 
                   // Extract Inflections (Exchange)
                   let inflections: string[] = [];
@@ -162,9 +170,16 @@ export default defineBackground(() => {
                   
                   // Filter Youdao sentences too
                   sentences = sentences.filter(s => s.orig.length > 8 && s.orig.includes(' ') && s.trans);
+                  const seenSent = new Set();
+                  sentences = sentences.filter((s: any) => {
+                      if (seenSent.has(s.orig)) return false;
+                      seenSent.add(s.orig);
+                      return true;
+                  });
 
                   // Extract Inflections
                   const inflections: string[] = [];
+                  // Method 1: simple.word[0].exchange
                   if (data.simple?.word?.[0]?.exchange) {
                       const ex = data.simple.word[0].exchange;
                       Object.values(ex).forEach((val: any) => {
@@ -172,6 +187,8 @@ export default defineBackground(() => {
                            else if (typeof val === 'string' && val.trim()) inflections.push(val);
                       });
                   }
+                  // Method 2: ec.word[0].exchange (sometimes implicit) or basic data
+                  // Youdao is messy, but simple.exchange is usually enough.
                   
                   return {
                       phoneticUs,
@@ -233,7 +250,8 @@ export default defineBackground(() => {
   const smartAssignSentence = (
       sentences: { orig: string; trans: string }[], 
       definitionKeywords: string[],
-      usedIndices: Set<number>
+      usedIndices: Set<number>,
+      isPrimaryMeaning: boolean
   ) => {
       if (!sentences || sentences.length === 0) return { orig: '', trans: '' };
       
@@ -246,7 +264,6 @@ export default defineBackground(() => {
 
           for (const keyword of definitionKeywords) {
               // Exact keyword match (e.g. "预订" in "我预订了机票")
-              // We do NOT use fuzzy single-char matching anymore to avoid false positives (e.g. "书" matching "书写" or "证书")
               if (keyword.length > 0 && sent.trans.includes(keyword)) {
                   usedIndices.add(i);
                   return sent;
@@ -255,13 +272,17 @@ export default defineBackground(() => {
       }
 
       // 2. Strict Fallback
-      // ONLY if this is the very first definition (usedIndices is empty), and we found no match,
-      // we return the first sentence as a generic example.
-      // If usedIndices is NOT empty (meaning previous definitions already took some sentences),
-      // we DO NOT return a fallback. This prevents "Book" sentences appearing for "Reserve".
-      if (usedIndices.size === 0 && sentences.length > 0) {
-           usedIndices.add(0);
-           return sentences[0];
+      // ONLY if this is the very first definition (isPrimaryMeaning), and we found no match,
+      // we return the first unused sentence as a generic example.
+      // If this is a secondary meaning (e.g. verb meaning of "book"), and we didn't find "reserve" context,
+      // we MUST return empty, otherwise we show a "read book" example which is confusing.
+      if (isPrimaryMeaning) {
+           for (let i = 0; i < sentences.length; i++) {
+                if (!usedIndices.has(i)) {
+                    usedIndices.add(i);
+                    return sentences[i];
+                }
+           }
       }
 
       // Return empty to indicate no suitable match
@@ -352,7 +373,8 @@ export default defineBackground(() => {
                   
                   // Use Smart Assignment Logic
                   const keywords = extractKeywords(def.means);
-                  const sent = smartAssignSentence(validSentences, keywords, usedIndices);
+                  // Pass 'idx === 0' to indicate only the primary meaning gets a fallback sentence
+                  const sent = smartAssignSentence(validSentences, keywords, usedIndices, idx === 0);
 
                   return {
                       translation: formattedTranslation.trim(),
